@@ -1,6 +1,6 @@
 {
   "name": "hyperquext-gzip",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "./hq-gzip.js",
   "description": "Gzip compression for Hyperquext requests.",
   "homepage": "https://github.com/tounano/hyperquext-gzip/",

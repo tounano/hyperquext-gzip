@@ -2,25 +2,13 @@ var _ = require('underscore');
 var zlib = require('zlib');
 var through = require('through');
 var url = require('url')
+var hq=require("hyperquext");
+var parseArgs = hq.devcorators.parseArgs,
+  getFinalRequestFromHyperquext = hq.helpers.getFinalRequestFromHyperquext,
+  getResponseFromClientRequest = hq.helpers.getResponseFromClientRequest
 
 module.exports = function hyperquextGzip(hyperquext) {
-  return function (uri, opts, cb) {
-    if (typeof uri === 'object') {
-      cb = opts;
-      opts = uri;
-      uri = undefined;
-    }
-    if (typeof opts === 'function') {
-      cb = opts;
-      opts = undefined;
-    }
-    if (!opts) opts = {};
-    if (uri !== undefined) opts.uri = uri;
-    if (opts.uri !== undefined)
-      opts = _.extend(opts, url.parse(opts.uri));
-    else
-      opts.uri = url.format(opts);
-
+  return parseArgs(function (uri, opts, cb) {
     if (opts.gzip !== true) return hyperquext(opts, cb);
 
     opts = _.clone(opts);
@@ -31,14 +19,13 @@ module.exports = function hyperquextGzip(hyperquext) {
 
     var req = hyperquext(opts);
 
-    req.on('request', function (clientRequest) {
-      proxy.emit('request',clientRequest);
-    })
+    req.on('request', function (clientRequest) {proxy.emit('request',clientRequest);})
+    req.on('error', function (err) {proxy.emit('error',err);})
 
-    req.once('finalRequest', function (clientRequest) {
-      getResponseFromClientRequest(clientRequest, function (err, res) {
+    getFinalRequestFromHyperquext(req, function (err, finalRequest) {
+      getResponseFromClientRequest(finalRequest, function (err, res) {
         var encoding = getValue(res.headers, 'content-encoding');
-        if (!encoding || encoding.search('gzip') === -1) return proxy.emit('finalRequest', clientRequest);
+        if (!encoding || encoding.search('gzip') === -1) return proxy.emit('finalRequest', finalRequest);
 
 
         var stream = (require('through')()).pause();
@@ -49,8 +36,8 @@ module.exports = function hyperquextGzip(hyperquext) {
 
         gzipped.on('data', function (d) {stream.queue(d)});
         gzipped.on('end', function () {
-          clientRequest.res = _.extend({}, clientRequest.res, stream);
-          proxy.emit('finalRequest', clientRequest);
+          finalRequest.res = _.extend({}, finalRequest.res, stream);
+          proxy.emit('finalRequest', finalRequest);
           stream.resume();
           stream.queue(null);
         })
@@ -60,7 +47,7 @@ module.exports = function hyperquextGzip(hyperquext) {
     })
 
     return proxy;
-  }
+  })
 }
 
 function getValue(json, property) {
@@ -71,11 +58,4 @@ function getValue(json, property) {
   })
 
   return result;
-}
-
-function getResponseFromClientRequest(clientRequest, cb) {
-  if (clientRequest.res) return cb(null, clientRequest.res);
-  clientRequest.once('response', function (res) {
-    cb(null, res);
-  });
 }
